@@ -10,9 +10,9 @@ class LegoDetection:
     def __init__(self) -> None:
         self.files = glob.glob('train/*.jpg')
         self.shapes = glob.glob('shapes/*.png')
+        self.tmp_ctr = 0
 
     def get_masked_img(self, img_color):
-
         hsv = cv2.cvtColor(img_color, cv.COLOR_BGR2HSV)
         hls = cv2.cvtColor(img_color, cv.COLOR_BGR2HLS)
         white1 = cv.inRange(hsv, (7, 0, 170), (255, 255, 189))
@@ -28,6 +28,9 @@ class LegoDetection:
         for i, cnt in enumerate(contours):
             rect = cv2.minAreaRect(cnt)
             if (rect[1][0] > 20 and rect[1][1] > 20) and hierarchy[0][i][3] == -1:
+                exp_val = 20
+                rect = ((rect[0][0] - exp_val, rect[0][1] - exp_val), (rect[1][0] + exp_val*3, rect[1][1] + exp_val*3), rect[2])
+                
                 box = cv2.boxPoints(rect)
                 box = np.int0(box)
                 # cv2.drawContours(image, [box], 0, (0, 0, 255), 2)
@@ -43,40 +46,41 @@ class LegoDetection:
                 if width < height:
                     warped = cv2.rotate(warped, cv2.ROTATE_90_CLOCKWISE)
                 shapes.append(warped)
-                # cv2.imwrite(f"{len(shapes)}.jpg", warped)
+                self.tmp_ctr += 1
+                # cv2.imwrite(f"{self.tmp_ctr}.jpg", warped)
+        #show img
+        # cv.imshow('shapes', image)
+        # cv.waitKey(0)
         return shapes
 
     def match_shape(self, shape):
         best_shape = None
         lowest_score = 666
+        kernel = np.ones((4, 4), np.uint8)
+        shape = cv.morphologyEx(shape, cv.MORPH_CLOSE, kernel)
+        shape = cv.morphologyEx(shape, cv.MORPH_OPEN, kernel)
+
+        
         for sample_file in self.shapes:
             sample_img = cv2.imread(sample_file, 0)
-            #resize shape to match the image
-            # size = (100,100)
-            # # shape = cv2.resize(shape ,size, interpolation=cv2.INTER_AREA)
-            # # shape_img = cv2.resize(shape_img ,size, interpolation=cv2.INTER_AREA)
-            # for i in range (0,4):
-            #     # shape_img = cv2.rotate(shape_img, cv2.ROTATE_90_CLOCKWISE)
-            #     for j in range(0,2):
-            #         # shape_img = cv2.flip(shape_img, 0)
-            #         for k in range(0,2):
-            #             # shape_img = cv2.flip(shape_img, 1)
-            contour1, heirarchy = cv2.findContours(sample_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            contour2, heirarchy = cv2.findContours(shape, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            score = cv2.matchShapes(contour1[0], contour2[0], cv2.CONTOURS_MATCH_I1, 0)
+            size = (200,200)
+            shape = cv.resize(shape, size)
+            sample_img = cv.resize(sample_img, size)
+            for j in range(0,2):
+                sample_img = cv2.flip(sample_img, 0)
+                for k in range(0,2):
+                    sample_img = cv2.flip(sample_img, 1)
+                    
+                    contour1, heirarchy = cv2.findContours(sample_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    contour2, heirarchy = cv2.findContours(shape, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    score = cv2.matchShapes(contour1[0], contour2[0], cv2.CONTOURS_MATCH_I1, 0)
             # score = cv.matchTemplate(shape,shape_img,cv.TM_CCOEFF_NORMED)
 
 
             # gray = cv.cvtColor(shape,cv.COLOR_BGR2GRAY)
 
 
-            dst = cv.cornerHarris(shape,2,3,0.04)
-            bgr = cv.cvtColor(shape,cv.COLOR_GRAY2BGR)
-            bgr[dst>0.1*dst.max()]=[0,0,255]
-            cv.imshow('dst',bgr)
-            cv2.waitKey(0)
-
-            if score < lowest_score and score < 0.1:
+            if score < lowest_score and score < 0.1 and score > 0.01:
                 lowest_score = score
                 best_shape = sample_img.copy()
 
@@ -87,15 +91,7 @@ class LegoDetection:
             cv2.imshow('shape', shape)
             cv2.waitKey(0)
 
-    def detect_corners(self, img):
-        operatedImage = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        operatedImage = np.float32(operatedImage)
-        dest = cv2.cornerHarris(operatedImage, 3, 3, 0.22)
-        dest = cv2.dilate(dest, None)
-        img[dest > 0.01 * dest.max()]=[0, 0, 255]
 
-        cv.imshow('corners', img)
-        cv.waitKey(0)
 
     def detect(self):
         for file in self.files:
@@ -115,14 +111,15 @@ class LegoDetection:
                 dilated, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             masks, color_masks = self.get_masked_img(img_color)
 
-            shapes = self.cropp_shapes(contours, hierarchy, img_color)
+            shapes = self.cropp_shapes(contours, hierarchy, masks)
 
             for shape in shapes:
-                # self.match_shape(shape)
-                self.detect_corners(shape)
-                # cv2.imshow('org', shape)
-                # cv2.waitKey(0)
+                self.match_shape(shape)
+                # self.detect_corners(shape)
 
+                # cv2.imshow('org', closing)
+                # cv2.waitKey(0)
+                pass
 
 if __name__ == '__main__':
     LegoDetection().detect()
