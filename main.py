@@ -18,18 +18,6 @@ class LegoDetection:
         g = cv.inRange(hls, (35, 0, 0), (130, 92, 255))
         c = 255 - c
         masks = c + g + w
-
-        # r1 = cv.inRange(hsv, (0, 70, 50), (10, 255, 255))
-        # r2 = cv.inRange(hsv, (170, 70, 50), (180, 255, 255))
-        # colors = []
-        # colors.append(r1 + r2)
-        # colors.append(cv.inRange(hsv, (65, 108, 52), (98, 255, 255)))
-        # colors.append(cv.inRange(hsv, (100, 50, 50), (140, 255, 255)))
-        # colors.append(cv.inRange(hsv, (20, 50, 50), (40, 255, 255)))
-        # colors.append(cv.inRange(hsv, (94, 0, 0), (103, 255, 255)))
-        # masks = sum(colors)
-
-
         mask_color = cv.bitwise_and(img_color, img_color, mask=masks)
 
         return masks, mask_color
@@ -54,10 +42,6 @@ class LegoDetection:
                     warped = cv2.rotate(warped, cv2.ROTATE_90_CLOCKWISE)
                 shapes.append(warped)
                 self.tmp_ctr += 1
-                # cv2.imwrite(f"{self.tmp_ctr}.jpg", warped)
-        # show img
-        # cv.imshow('shapes', image)
-        # cv.waitKey(0)
         return shapes
 
     def match_shape(self, shape):
@@ -89,7 +73,6 @@ class LegoDetection:
 
         if best_shape is not None:
             best_shape_name = int(best_shape_name)
-            # print(best_shape_name)
             return best_shape_name
         else:
             return None
@@ -119,7 +102,6 @@ class LegoDetection:
             return 10
 
     def detect(self):
-        # print(self.file)
         img_color = cv2.imread(self.file)
         img_color = cv2.resize(img_color, None, fx=0.3, fy=0.3)
         img_gray = cv2.cvtColor(img_color, cv2.COLOR_BGR2GRAY)
@@ -147,11 +129,7 @@ class LegoDetection:
                 color_idx = self.detect_color(color_lego[idx])
                 if color_idx is not None:
                     output[color_idx] += 1
-                # cv.imshow("sddddasd", color_lego[idx])
-                # cv.imshow("sdasd", bin_lego[idx])
-                # cv2.waitKey(0)
-
-        return output
+            return output
 
 
 
