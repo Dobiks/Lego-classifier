@@ -1,10 +1,14 @@
+from cv2 import imshow
+from matplotlib.colors import hex2color
+from sklearn.cluster import KMeans
 import sys
 import cv2 as cv
 import cv2
 import glob
 import numpy as np
 import random
-
+import webcolors
+from sklearn.metrics import mean_squared_error
 
 class LegoDetection:
     def __init__(self) -> None:
@@ -20,20 +24,21 @@ class LegoDetection:
         green = cv.inRange(hls, (34, 0, 0), (131, 93, 255))
         colors = 255 - colors
         masks = colors + green + white1
-        final = cv.bitwise_and(img_color, img_color, mask=masks)
-        return masks, final
+        mask_color = cv.bitwise_and(img_color, img_color, mask=masks)
+        return masks, mask_color
 
     def cropp_shapes(self, contours, hierarchy, image):
         shapes = []
         for i, cnt in enumerate(contours):
             rect = cv2.minAreaRect(cnt)
             if (rect[1][0] > 20 and rect[1][1] > 20) and hierarchy[0][i][3] == -1:
-                exp_val = 20
-                rect = ((rect[0][0] - exp_val, rect[0][1] - exp_val), (rect[1][0] + exp_val*3, rect[1][1] + exp_val*3), rect[2])
+                exp_val = 10
+                # rect = ((rect[0][0] - exp_val, rect[0][1] - exp_val), (rect[1][0]+exp_val*3, rect[1][1]+exp_val*3), rect[2])
                 
                 box = cv2.boxPoints(rect)
                 box = np.int0(box)
                 # cv2.drawContours(image, [box], 0, (0, 0, 255), 2)
+
                 width = int(rect[1][0])
                 height = int(rect[1][1])
                 src_pts = box.astype("float32")
@@ -59,40 +64,60 @@ class LegoDetection:
         kernel = np.ones((4, 4), np.uint8)
         shape = cv.morphologyEx(shape, cv.MORPH_CLOSE, kernel)
         shape = cv.morphologyEx(shape, cv.MORPH_OPEN, kernel)
-
-        
         for sample_file in self.shapes:
             sample_img = cv2.imread(sample_file, 0)
-            size = (200,200)
-            shape = cv.resize(shape, size)
-            sample_img = cv.resize(sample_img, size)
             for j in range(0,2):
                 sample_img = cv2.flip(sample_img, 0)
                 for k in range(0,2):
                     sample_img = cv2.flip(sample_img, 1)
-                    
                     contour1, heirarchy = cv2.findContours(sample_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                     contour2, heirarchy = cv2.findContours(shape, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                    score = cv2.matchShapes(contour1[0], contour2[0], cv2.CONTOURS_MATCH_I1, 0)
-            # score = cv.matchTemplate(shape,shape_img,cv.TM_CCOEFF_NORMED)
+                    try:
+                        score = cv2.matchShapes(contour1[0], contour2[0], cv2.CONTOURS_MATCH_I1, 0)
+                    except:
+                        score = 666
 
-
-            # gray = cv.cvtColor(shape,cv.COLOR_BGR2GRAY)
-
-
-            if score < lowest_score and score < 0.1 and score > 0.01:
+            if score < lowest_score and score < 0.079 and score > 0.01:
                 lowest_score = score
+                best_shape_name = sample_file[-5]
                 best_shape = sample_img.copy()
 
 
         if best_shape is not None:
-            print("lowest: ", lowest_score, sample_file)
-            cv2.imshow('sample', best_shape)
-            cv2.imshow('shape', shape)
-            cv2.waitKey(0)
+            print("lowest: ", lowest_score, best_shape_name)
+            # cv2.imshow('sample', best_shape)
+            # cv2.imshow('shape', shape)
+            # cv2.waitKey(0)
+            return int(best_shape_name)
+        else:
+            return None
+        
 
 
+    def detect_color(self, img_color):
+        colors = {}
+        hsv = cv2.cvtColor(img_color, cv.COLOR_BGR2HSV)
+        r1 = cv.inRange(hsv, (0, 70, 50), (10, 255, 255))
+        r2 = cv.inRange(hsv, (170, 70, 50), (180, 255, 255))
+        colors['red'] = r1 + r2
+        colors['green'] = cv.inRange(hsv, (65, 108, 52), (98, 255, 255))
+        colors['blue'] = cv.inRange(hsv, (100, 50, 50), (140, 255, 255))
+        colors['yellow'] = cv.inRange(hsv, (20, 50, 50), (40, 255, 255))
+        colors['white'] = cv.inRange(hsv, (94, 0, 0), (103, 255, 255))
+        sum_pixels = img_color.shape[0] * img_color.shape[1]
+        color_values = {}
+        for color in colors:
+            color_ratio = cv2.countNonZero(colors[color]) / sum_pixels
+            if color_ratio > 0.1:
+                color_values[color] = color_ratio
 
+        if len(color_values) == 0:
+            return None
+        elif len(color_values) == 1:
+            return list(color_values.keys())[0]
+        else:
+            return 'mixed'
+        
     def detect(self):
         for file in self.files:
             print(file)
@@ -110,16 +135,26 @@ class LegoDetection:
             contours, hierarchy = cv2.findContours(
                 dilated, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             masks, color_masks = self.get_masked_img(img_color)
+            
+            # cv2.imshow('org', color_masks)
+            # cv2.waitKey(0)
 
-            shapes = self.cropp_shapes(contours, hierarchy, masks)
+            bin_lego = self.cropp_shapes(contours, hierarchy, masks)
+            # color_masks = cv2.cvtColor(color_masks, cv2.COLGOR_HSV2BGR)
+            color_lego = self.cropp_shapes(contours, hierarchy, img_color)
+            shapes = {1:0,2:0,3:0,4:0,5:0}
 
-            for shape in shapes:
-                self.match_shape(shape)
-                # self.detect_corners(shape)
-
-                # cv2.imshow('org', closing)
-                # cv2.waitKey(0)
-                pass
+            for lego in bin_lego:
+                shape = self.match_shape(lego)
+                if shape is not None:
+                    shapes[shape] += 1
+            print(shapes)
+            input()
+            # for lego in color_lego:
+            #     color = self.detect_color(lego)
+            #     print(color)
+            #     imshow('shape', lego)
+            #     cv2.waitKey(0)
 
 if __name__ == '__main__':
     LegoDetection().detect()
